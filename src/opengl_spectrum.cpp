@@ -31,7 +31,10 @@
 
 #define __STDC_LIMIT_MACROS
 
-#include <xbmc_vis_dll.h>
+#include "opengl_spectrum.h"
+
+#include <kodi/api2/visualization/Addon.hpp>
+
 #include <string.h>
 #include <math.h>
 #include <stdint.h>
@@ -267,14 +270,23 @@ void draw_bars(void)
   glPopMatrix();
 }
 
-//-- Create -------------------------------------------------------------------
-// Called on load. Addon should fully initalize or return error status
-//-----------------------------------------------------------------------------
-ADDON_STATUS ADDON_Create(void* hdl, void* props)
-{
-  if (!props)
-    return ADDON_STATUS_UNKNOWN;
 
+class CVisualizationSpectrum : public Visualization::CAddonInterface
+{
+public:
+  CVisualizationSpectrum(CAddonVisualizationSpectrum *addon, void* kodiInstance);
+  virtual ~CVisualizationSpectrum() {};
+
+  virtual void Start(int iChannels, int iSamplesPerSec, int iBitsPerSample, std::string szSongName) override;
+  virtual void AudioData(const float* pAudioData, int iAudioDataLength, float* pFreqData, int iFreqDataLength) override;
+  virtual void Render() override;
+
+private:
+  CAddonVisualizationSpectrum* m_addon;
+};
+
+eAddonStatus CAddonVisualizationSpectrum::Create()
+{
   scale = 1.0 / log(256.0);
 
 #if defined(HAS_GLES2)
@@ -292,13 +304,55 @@ ADDON_STATUS ADDON_Create(void* hdl, void* props)
 
   scale = 1.0 / log(256.0);
 
-  return ADDON_STATUS_NEED_SETTINGS;
+  return addonStatus_NEED_SETTINGS;
+}
+
+//-- Destroy ------------------------------------------------------------------
+// Do everything before unload of this add-on
+// !!! Add-on master function !!!
+//-----------------------------------------------------------------------------
+void CAddonVisualizationSpectrum::Destroy()
+{
+#if defined(HAS_GLES2)
+  if(vis_shader) 
+  {
+    vis_shader->Free();
+    delete vis_shader;
+  }
+#endif
+}
+
+eAddonStatus CAddonVisualizationSpectrum::CreateInstance(eInstanceType instanceType, KODI_HANDLE& addonInstance, KODI_HANDLE kodiInstance)
+{
+  KodiAPI::Log(ADDON_LOG_DEBUG, "%s - Creating the Spectrum visualization add-on", __FUNCTION__);
+
+  if (instanceType != CAddon::instanceVisualization)
+  {
+    KodiAPI::Log(ADDON_LOG_FATAL, "%s - Creation called with unsupported instance type", __FUNCTION__);
+    return addonStatus_PERMANENT_FAILURE;
+  }
+
+  addonInstance = new CVisualizationSpectrum(this, kodiInstance);
+  return addonStatus_OK;
+}
+
+void CAddonVisualizationSpectrum::DestroyInstance(KODI_HANDLE addonInstance)
+{
+  delete static_cast<CVisualizationSpectrum*>(addonInstance);
+}
+
+
+
+CVisualizationSpectrum::CVisualizationSpectrum(CAddonVisualizationSpectrum *addon, void* kodiInstance)
+  : Visualization::CAddonInterface(kodiInstance),
+    m_addon(addon)
+{
 }
 
 //-- Render -------------------------------------------------------------------
 // Called once per frame. Do all rendering here.
 //-----------------------------------------------------------------------------
-extern "C" void Render()
+void CVisualizationSpectrum::Render() 
 {
   glDisable(GL_BLEND);
   glMatrixMode(GL_PROJECTION);
@@ -332,7 +386,7 @@ extern "C" void Render()
   glEnable(GL_BLEND);
 }
 
-extern "C" void Start(int iChannels, int iSamplesPerSec, int iBitsPerSample, const char* szSongName)
+void CVisualizationSpectrum::Start(int iChannels, int iSamplesPerSec, int iBitsPerSample, std::string szSongName)
 {
   int x, y;
 
@@ -352,7 +406,7 @@ extern "C" void Start(int iChannels, int iSamplesPerSec, int iBitsPerSample, con
   z_angle = 0.0;
 }
 
-extern "C" void AudioData(const float* pAudioData, int iAudioDataLength, float *pFreqData, int iFreqDataLength)
+void CVisualizationSpectrum::AudioData(const float* pAudioData, int iAudioDataLength, float *pFreqData, int iFreqDataLength)
 {
   int i,c;
   int y=0;
@@ -390,128 +444,18 @@ extern "C" void AudioData(const float* pAudioData, int iAudioDataLength, float *
 }
 
 
-//-- GetInfo ------------------------------------------------------------------
-// Tell XBMC our requirements
-//-----------------------------------------------------------------------------
-extern "C" void GetInfo(VIS_INFO* pInfo)
-{
-  pInfo->bWantsFreq = false;
-  pInfo->iSyncDelay = 0;
-}
-
-
-//-- GetSubModules ------------------------------------------------------------
-// Return any sub modules supported by this vis
-//-----------------------------------------------------------------------------
-extern "C" unsigned int GetSubModules(char ***names)
-{
-  return 0; // this vis supports 0 sub modules
-}
-
-//-- OnAction -----------------------------------------------------------------
-// Handle XBMC actions such as next preset, lock preset, album art changed etc
-//-----------------------------------------------------------------------------
-extern "C" bool OnAction(long flags, const void *param)
-{
-  bool ret = false;
-  return ret;
-}
-
-//-- GetPresets ---------------------------------------------------------------
-// Return a list of presets to XBMC for display
-//-----------------------------------------------------------------------------
-extern "C" unsigned int GetPresets(char ***presets)
-{
-  return 0;
-}
-
-//-- GetPreset ----------------------------------------------------------------
-// Return the index of the current playing preset
-//-----------------------------------------------------------------------------
-extern "C" unsigned GetPreset()
-{
-  return 0;
-}
-
-//-- IsLocked -----------------------------------------------------------------
-// Returns true if this add-on use settings
-//-----------------------------------------------------------------------------
-extern "C" bool IsLocked()
-{
-  return false;
-}
-
-//-- Stop ---------------------------------------------------------------------
-// This dll must cease all runtime activities
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" void ADDON_Stop()
-{
-}
-
-//-- Destroy ------------------------------------------------------------------
-// Do everything before unload of this add-on
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" void ADDON_Destroy()
-{
-#if defined(HAS_GLES2)
-  if(vis_shader) 
-  {
-    vis_shader->Free();
-    delete vis_shader;
-  }
-#endif
-}
-
-//-- HasSettings --------------------------------------------------------------
-// Returns true if this add-on use settings
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" bool ADDON_HasSettings()
-{
-  return true;
-}
-
-//-- GetStatus ---------------------------------------------------------------
-// Returns the current Status of this visualisation
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" ADDON_STATUS ADDON_GetStatus()
-{
-  return ADDON_STATUS_OK;
-}
-
-//-- GetSettings --------------------------------------------------------------
-// Return the settings for XBMC to display
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" unsigned int ADDON_GetSettings(ADDON_StructSetting ***sSet)
-{
-  return 0;
-}
-
-//-- FreeSettings --------------------------------------------------------------
-// Free the settings struct passed from XBMC
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-
-extern "C" void ADDON_FreeSettings()
-{
-}
-
 //-- SetSetting ---------------------------------------------------------------
 // Set a specific Setting value (called from XBMC)
 // !!! Add-on master function !!!
 //-----------------------------------------------------------------------------
-extern "C" ADDON_STATUS ADDON_SetSetting(const char *strSetting, const void* value)
+eAddonStatus CAddonVisualizationSpectrum::SetSetting(std::string& settingName, const void *settingValue)
 {
-  if (!strSetting || !value)
-    return ADDON_STATUS_UNKNOWN;
+  if (settingName.empty() || !settingValue)
+    return addonStatus_UNKNOWN;
 
-  if (strcmp(strSetting, "bar_height")==0)
+  if (settingName == "bar_height")
   {
-    switch (*(int*) value)
+    switch (*(int*) settingValue)
     {
     case 1://standard
       scale = 1.f / log(256.f);
@@ -534,11 +478,11 @@ extern "C" ADDON_STATUS ADDON_SetSetting(const char *strSetting, const void* val
       scale = 0.5f / log(256.f);
       break;
     }
-    return ADDON_STATUS_OK;
+    return addonStatus_OK;
   }
-  else if (strcmp(strSetting, "speed")==0)
+  else if (settingName == "speed")
   {
-    switch (*(int*) value)
+    switch (*(int*) settingValue)
     {
     case 1:
       hSpeed = 0.025f;
@@ -561,12 +505,12 @@ extern "C" ADDON_STATUS ADDON_SetSetting(const char *strSetting, const void* val
       hSpeed = 0.05f;
       break;
     }
-    return ADDON_STATUS_OK;
+    return addonStatus_OK;
   }
-  else if (strcmp(strSetting, "mode")==0)
+  else if (settingName == "mode")
   {
 #if defined(HAS_OPENGL)
-    switch (*(int*) value)
+    switch (*(int*) settingValue)
     {
       case 1:
         g_mode = GL_LINE;
@@ -582,7 +526,7 @@ extern "C" ADDON_STATUS ADDON_SetSetting(const char *strSetting, const void* val
         break;
     }
 #else
-    switch (*(int*) value)
+    switch (*(int*) settingValue)
     {
       case 1:
         g_mode = GL_LINE_LOOP;
@@ -600,16 +544,10 @@ extern "C" ADDON_STATUS ADDON_SetSetting(const char *strSetting, const void* val
 
 #endif
 
-    return ADDON_STATUS_OK;
+    return addonStatus_OK;
   }
 
-  return ADDON_STATUS_UNKNOWN;
+  return addonStatus_UNKNOWN;
 }
 
-//-- Announce -----------------------------------------------------------------
-// Receive announcements from XBMC
-// !!! Add-on master function !!!
-//-----------------------------------------------------------------------------
-extern "C" void ADDON_Announce(const char *flag, const char *sender, const char *message, const void *data)
-{
-}
+ADDONCREATOR(CAddonVisualizationSpectrum); // Don't touch this!

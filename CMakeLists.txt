@@ -4,6 +4,8 @@ cmake_minimum_required(VERSION 2.6)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR})
 
+set(USE_KODI_API_LEVEL 2)
+
 find_package(Kodi REQUIRED)
 
 if(WIN32)
@@ -54,6 +56,8 @@ else(WIN32)
     endif()
   endif()
 endif()
+
+list(APPEND DEPLIBS ${kodi-addon-sharedlibrary_LIBRARIES})
 
 include_directories(${INCLUDES}
                     ${KODI_INCLUDE_DIR})
