@@ -33,8 +33,10 @@
 
 #include <xbmc_vis_dll.h>
 #include <string.h>
+#include <stdio.h>
 #include <math.h>
 #include <stdint.h>
+#include <stdexcept>
 
 #if defined(HAS_GLES2)
 #include "VisGUIShader.h"
@@ -270,36 +272,18 @@ void draw_bars(void)
 //-- Create -------------------------------------------------------------------
 // Called on load. Addon should fully initalize or return error status
 //-----------------------------------------------------------------------------
-ADDON_STATUS ADDON_Create(void* hdl, void* props)
+ADDON_STATUS ADDON_Create(void* hdl)
 {
-  if (!props)
-    return ADDON_STATUS_UNKNOWN;
-
-  scale = 1.0 / log(256.0);
-
-#if defined(HAS_GLES2)
-  vis_shader = new CVisGUIShader(vert, frag);
-
-  if(!vis_shader)
-    return ADDON_STATUS_UNKNOWN;
-
-  if(!vis_shader->CompileAndLink())
-  {
-    delete vis_shader;
-    return ADDON_STATUS_UNKNOWN;
-  }  
-#endif
-
-  scale = 1.0 / log(256.0);
-
   return ADDON_STATUS_NEED_SETTINGS;
 }
 
 //-- Render -------------------------------------------------------------------
 // Called once per frame. Do all rendering here.
 //-----------------------------------------------------------------------------
-extern "C" void Render()
+extern "C" void Render(void* addonInstance)
 {
+//  throw std::logic_error("test");
+
   glDisable(GL_BLEND);
   glMatrixMode(GL_PROJECTION);
   glPushMatrix();
@@ -332,7 +316,7 @@ extern "C" void Render()
   glEnable(GL_BLEND);
 }
 
-extern "C" void Start(int iChannels, int iSamplesPerSec, int iBitsPerSample, const char* szSongName)
+extern "C" void Start(void* addonInstance, int iChannels, int iSamplesPerSec, int iBitsPerSample, const char* szSongName)
 {
   int x, y;
 
@@ -352,7 +336,7 @@ extern "C" void Start(int iChannels, int iSamplesPerSec, int iBitsPerSample, con
   z_angle = 0.0;
 }
 
-extern "C" void AudioData(const float* pAudioData, int iAudioDataLength, float *pFreqData, int iFreqDataLength)
+extern "C" void AudioData(void* addonInstance, const float* pAudioData, int iAudioDataLength, float *pFreqData, int iFreqDataLength)
 {
   int i,c;
   int y=0;
@@ -393,7 +377,7 @@ extern "C" void AudioData(const float* pAudioData, int iAudioDataLength, float *
 //-- GetInfo ------------------------------------------------------------------
 // Tell XBMC our requirements
 //-----------------------------------------------------------------------------
-extern "C" void GetInfo(VIS_INFO* pInfo)
+extern "C" void GetInfo(void* addonInstance, VIS_INFO* pInfo)
 {
   pInfo->bWantsFreq = false;
   pInfo->iSyncDelay = 0;
@@ -403,7 +387,7 @@ extern "C" void GetInfo(VIS_INFO* pInfo)
 //-- GetSubModules ------------------------------------------------------------
 // Return any sub modules supported by this vis
 //-----------------------------------------------------------------------------
-extern "C" unsigned int GetSubModules(char ***names)
+extern "C" unsigned int GetSubModules(void* addonInstance, char ***names)
 {
   return 0; // this vis supports 0 sub modules
 }
@@ -411,7 +395,7 @@ extern "C" unsigned int GetSubModules(char ***names)
 //-- OnAction -----------------------------------------------------------------
 // Handle XBMC actions such as next preset, lock preset, album art changed etc
 //-----------------------------------------------------------------------------
-extern "C" bool OnAction(long flags, const void *param)
+extern "C" bool OnAction(void* addonInstance, long flags, const void *param)
 {
   bool ret = false;
   return ret;
@@ -420,7 +404,7 @@ extern "C" bool OnAction(long flags, const void *param)
 //-- GetPresets ---------------------------------------------------------------
 // Return a list of presets to XBMC for display
 //-----------------------------------------------------------------------------
-extern "C" unsigned int GetPresets(char ***presets)
+extern "C" unsigned int GetPresets(void* addonInstance, char ***presets)
 {
   return 0;
 }
@@ -428,7 +412,7 @@ extern "C" unsigned int GetPresets(char ***presets)
 //-- GetPreset ----------------------------------------------------------------
 // Return the index of the current playing preset
 //-----------------------------------------------------------------------------
-extern "C" unsigned GetPreset()
+extern "C" unsigned GetPreset(void* addonInstance)
 {
   return 0;
 }
@@ -436,7 +420,7 @@ extern "C" unsigned GetPreset()
 //-- IsLocked -----------------------------------------------------------------
 // Returns true if this add-on use settings
 //-----------------------------------------------------------------------------
-extern "C" bool IsLocked()
+extern "C" bool IsLocked(void* addonInstance)
 {
   return false;
 }
@@ -455,6 +439,38 @@ extern "C" void ADDON_Stop()
 //-----------------------------------------------------------------------------
 extern "C" void ADDON_Destroy()
 {
+
+}
+
+ADDON_STATUS ADDON_CreateInstance(int instanceType, const char* instanceID, const void* instanceProps, void* instanceFunctions, void* kodiInstance, void** addonInstance)
+{
+  fprintf(stderr, "-----------------------> %s\n", __PRETTY_FUNCTION__);
+  SetVisualizationFuncTable(static_cast<sKodiToAddonFuncTable_Visualization*>(instanceFunctions));
+  
+  const VIS_PROPS* scrprops = static_cast<const VIS_PROPS*>(instanceProps);
+  
+  scale = 1.0 / log(256.0);
+
+#if defined(HAS_GLES2)
+  vis_shader = new CVisGUIShader(vert, frag);
+
+  if(!vis_shader)
+    return ADDON_STATUS_UNKNOWN;
+
+  if(!vis_shader->CompileAndLink())
+  {
+    delete vis_shader;
+    return ADDON_STATUS_UNKNOWN;
+  }
+#endif
+
+  scale = 1.0 / log(256.0);
+
+  return ADDON_STATUS_OK;
+}
+  
+void ADDON_DestroyInstance(int instanceType, const char* instanceID, void* instance)
+{
 #if defined(HAS_GLES2)
   if(vis_shader) 
   {
@@ -463,6 +479,7 @@ extern "C" void ADDON_Destroy()
   }
 #endif
 }
+
 
 //-- HasSettings --------------------------------------------------------------
 // Returns true if this add-on use settings
