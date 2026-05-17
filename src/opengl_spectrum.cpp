@@ -46,11 +46,8 @@ public:
   CVisualizationSpectrum() = default;
   ~CVisualizationSpectrum() override = default;
 
-  bool Start(int channels,
-             int samplesPerSec,
-             int bitsPerSample,
-             const std::string& songName) override;
-  void Stop() override;
+  bool Init() override;
+  void DeInit() override;
   void Render() override;
   void AudioData(const float* audioData, size_t audioDataLength) override;
   ADDON_STATUS SetSetting(const std::string& settingName,
@@ -101,16 +98,8 @@ private:
   bool m_startOK{false};
 };
 
-bool CVisualizationSpectrum::Start(int channels,
-                                   int samplesPerSec,
-                                   int bitsPerSample,
-                                   const std::string& songName)
+bool CVisualizationSpectrum::Init()
 {
-  (void)channels;
-  (void)samplesPerSec;
-  (void)bitsPerSample;
-  (void)songName;
-
   SetBarHeightSetting(kodi::addon::GetSettingInt("bar_height"));
   SetSpeedSetting(kodi::addon::GetSettingInt("speed"));
   SetModeSetting(kodi::addon::GetSettingInt("mode"));
@@ -136,7 +125,7 @@ bool CVisualizationSpectrum::Start(int channels,
   return true;
 }
 
-void CVisualizationSpectrum::Stop()
+void CVisualizationSpectrum::DeInit()
 {
   if (!m_startOK)
     return;
