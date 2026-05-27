@@ -137,6 +137,8 @@ CVisualizationSpectrum::CVisualizationSpectrum()
 CVisualizationSpectrum::~CVisualizationSpectrum()
 {
   delete[] m_pcm;
+  if (m_initialized)
+    DeInit();
 }
 
 bool CVisualizationSpectrum::Init()
@@ -177,8 +179,6 @@ bool CVisualizationSpectrum::Init()
   glGenTextures(1, &m_values_tex);
   glBindTexture(GL_TEXTURE_2D, m_values_tex);
 
-  //glClearColor(0, 0, 0, 1);
-
   m_initialized = true;
 
   return true;
@@ -186,8 +186,6 @@ bool CVisualizationSpectrum::Init()
 
 void CVisualizationSpectrum::DeInit()
 {
-  //glDisable(GL_TEXTURE);
-
   if (m_values_tex)
     glDeleteTextures(1, &m_values_tex);
 
@@ -203,6 +201,14 @@ void CVisualizationSpectrum::DeInit()
     m_fftqueue.pop();
     delete[] freq;
   }
+  while (!m_fftqueueInactive.empty())
+  {
+    float* freq = m_fftqueueInactive.front();
+    m_fftqueueInactive.pop();
+    delete[] freq;
+  }
+
+  m_initialized = false;
 }
 
 bool CVisualizationSpectrum::AudioStart(int channels, int samplesPerSec, int bitsPerSample)
@@ -222,10 +228,26 @@ void CVisualizationSpectrum::AudioData(const float* pAudioData, size_t iAudioDat
   {
     write_to_buffer(pAudioData + i * AUDIO_BUFFER * m_channels, AUDIO_BUFFER * m_channels,
                   m_channels);
-    float* freq = new float[1024];
+    if (m_fftqueue.size() > 20)
+    {
+      kodi::Log(ADDON_LOG_WARNING, "Too many FFT frames in queue, dropping one");
+      float* freq = m_fftqueue.front().second;
+      m_fftqueue.pop();
+      delete[] freq;
+    }
+    float* freq;
+    if (!m_fftqueueInactive.empty())
+    {
+      freq = m_fftqueueInactive.front();
+      m_fftqueueInactive.pop();
+    }
+    else
+    {
+      freq = new float[1024];
+    }
     calc_freq(m_pcm, freq);
     m_fftqueue.push(std::make_pair(m_currentTime, freq));
-    m_currentTime += std::chrono::milliseconds((int)(1000.0 / m_samplesPerSec * AUDIO_BUFFER));
+    m_currentTime += std::chrono::milliseconds((int)(1000.0f / m_samplesPerSec * AUDIO_BUFFER));
   }
 }
 
@@ -237,12 +259,10 @@ void CVisualizationSpectrum::Render()
     float* freq = m_fftqueue.front().second;
     m_fftqueue.pop();
     render_freq(freq);
-    delete[] freq;
+    m_fftqueueInactive.push(freq);
   }
 
   glClearColor(0, 0, 0, 1);
-
-  //glEnable(GL_TEXTURE);
   glEnable(GL_DEPTH_TEST);
   glEnable(GL_CULL_FACE);
 
@@ -252,9 +272,7 @@ void CVisualizationSpectrum::Render()
 
   glm::mat4 model = glm::mat4(1.0f);
   model = glm::translate(model, glm::vec3(0.0f, -0.5f, -5.0f));
-
   model = glm::rotate(model, glm::radians(38.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-
   model = glm::rotate(model, glm::radians(m_angle + 180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
   glm::mat4 mvp = m_projection * model;
@@ -279,7 +297,6 @@ void CVisualizationSpectrum::Render()
   glBindVertexArray(0);
   glUseProgram(0);
 
-  //glDisable(GL_TEXTURE);
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_CULL_FACE);
 }

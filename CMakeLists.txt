@@ -18,7 +18,6 @@ else()
   add_definitions(${OPENGLES_DEFINITIONS})
 endif()
 
-
 set(SPECTRUM_SOURCES src/fft.cc
                      src/opengl_spectrum.cpp)
 

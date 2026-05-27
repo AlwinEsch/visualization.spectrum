@@ -108,6 +108,7 @@ private:
   float* m_pcm;
   std::chrono::steady_clock::time_point m_currentTime;
   std::queue<std::pair<std::chrono::steady_clock::time_point, float*>> m_fftqueue;
+  std::queue<float*> m_fftqueueInactive;
 
   int m_pos{0};
   float m_angle{25};
